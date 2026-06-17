@@ -18,6 +18,7 @@ Startup flow:
 
 import os
 import pickle
+from concurrent.futures import ThreadPoolExecutor
 from typing import Optional
 
 from langchain_chroma import Chroma
@@ -110,8 +111,22 @@ def get_hybrid_retriever(
     )
 
     def hybrid_search(query: str) -> list[Document]:
-        bm25_docs = bm25_retriever.invoke(query)
-        vector_docs = vector_retriever.invoke(query)
+        # ── v3 OPTIMIZATION: parallel retrieval ──────────────────────────────
+        # BM25 and vector search are independent — run them concurrently via
+        # ThreadPoolExecutor. Each call blocks on I/O (BM25: index scan,
+        # vector: Chroma disk read + embedding inference), so threading gives
+        # real speedup. Expected: ~40-50% reduction in retrieve node latency.
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            bm25_future = executor.submit(bm25_retriever.invoke, query)
+            vector_future = executor.submit(vector_retriever.invoke, query)
+            bm25_docs = bm25_future.result()
+            vector_docs = vector_future.result()
+
+        # ── ORIGINAL sequential retrieval (commented out for reference) ──────
+        # bm25_docs = bm25_retriever.invoke(query)
+        # vector_docs = vector_retriever.invoke(query)
+        # ─────────────────────────────────────────────────────────────────────
+
         return _rrf_merge(bm25_docs, vector_docs)
 
     return RunnableLambda(hybrid_search)

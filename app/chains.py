@@ -107,7 +107,36 @@ hallucination_prompt = ChatPromptTemplate.from_messages([
 hallucination_chain = hallucination_prompt | llm | JsonOutputParser()
 
 
-# ── 6. Citation check chain — v2 ─────────────────────────────────────────────
+# ── 6. Verify + Evaluate chain — v3 OPTIMIZATION ─────────────────────────────
+# Previously two separate LLM calls:
+#   hallucination_chain  → "is this answer grounded?" (LLM call 1)
+#   grade_chain          → "score this answer 1-10"   (LLM call 2)
+#
+# Combined into ONE call that returns both signals simultaneously.
+# Saves one full LLM round trip (~3-5s) on every request.
+#
+# Returns: {"grounded": bool, "quality_score": int, "reasoning": str}
+verify_and_evaluate_prompt = ChatPromptTemplate.from_messages([
+    (
+        "system",
+        "You are a strict quality evaluator for RAG answers. Given context, "
+        "a question, and an answer, do TWO things in one response:\n"
+        "1. Check if every factual claim in the answer is directly supported "
+        "by the context (grounded: true/false).\n"
+        "2. Rate the overall answer quality 1-10 where 7+ means fully addresses "
+        "the question with accurate, well-cited information.\n\n"
+        "Respond ONLY with valid JSON, no explanation outside it.\n"
+        'Format: {{"grounded": true, "quality_score": 8, "reasoning": "one sentence"}}',
+    ),
+    (
+        "human",
+        "Context:\n{context}\n\nQuestion: {question}\n\nAnswer: {answer}",
+    ),
+])
+verify_and_evaluate_chain = verify_and_evaluate_prompt | llm | JsonOutputParser()
+
+
+# ── 7. Citation check chain — v2 ─────────────────────────────────────────────
 # Returns {"has_citations": true/false, "missing": "none or description"}
 # Checks that the answer contains at least one [Source: <name>] citation.
 citation_check_prompt = ChatPromptTemplate.from_messages([
