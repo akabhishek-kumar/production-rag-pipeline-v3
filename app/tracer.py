@@ -1,28 +1,40 @@
-"""Langfuse tracing + LangChain token-count callback — v3.
+"""LLM observability integrations — v3.
 
-Langfuse is an open-source LLM observability platform.
-It captures every prompt, completion, and token count through the pipeline
-and displays them in a real-time dashboard.
+Two tracing backends, both optional, both safe to disable:
 
-If LANGFUSE_PUBLIC_KEY is not set, tracing is silently disabled —
-the pipeline still runs normally without any external dependency.
+┌─────────────┬────────────────────────────────────────────────────────────┐
+│ Langfuse    │ Open-source. Requires a callback handler per request.      │
+│             │ Self-hostable. Set LANGFUSE_PUBLIC_KEY to enable.          │
+├─────────────┼────────────────────────────────────────────────────────────┤
+│ LangSmith   │ Made by the LangChain team. Native LangGraph support —     │
+│             │ zero code changes, just set LANGCHAIN_TRACING_V2=true and  │
+│             │ LANGCHAIN_API_KEY. Auto-traces every node and LLM call.    │
+└─────────────┴────────────────────────────────────────────────────────────┘
 
 Token counting:
   TokenCountCallback is a LangChain BaseCallbackHandler that hooks into
   on_llm_end to accumulate input + output tokens across all LLM calls
-  in a single graph execution. The counts are used to estimate cost.
+  in a single graph execution. Used to estimate per-request cost.
 
-Setup:
+Setup — Langfuse:
   1. Sign up at https://cloud.langfuse.com (free tier)
   2. Create a project → copy public/secret keys
   3. Add to .env:
        LANGFUSE_PUBLIC_KEY=pk-lf-...
        LANGFUSE_SECRET_KEY=sk-lf-...
-       LANGFUSE_HOST=https://cloud.langfuse.com
+
+Setup — LangSmith:
+  1. Sign up at https://smith.langchain.com (free tier)
+  2. Settings → API Keys → Create key
+  3. Add to .env:
+       LANGCHAIN_TRACING_V2=true
+       LANGCHAIN_API_KEY=ls__...
+       LANGCHAIN_PROJECT=production-rag-v3
 """
 
 from __future__ import annotations
 
+import os
 from typing import TYPE_CHECKING, Any, Optional
 
 from langchain_core.callbacks import BaseCallbackHandler
@@ -32,6 +44,24 @@ from app.config import settings
 
 if TYPE_CHECKING:
     pass
+
+# ── LangSmith — activate via env vars (LangGraph reads these automatically) ──
+
+def _activate_langsmith() -> bool:
+    """Set the env vars LangChain/LangGraph check at import time.
+
+    Returns True if LangSmith is enabled.
+    LangGraph will auto-trace every node and LLM call once these are set.
+    """
+    if not settings.langchain_api_key or settings.langchain_tracing_v2 != "true":
+        return False
+    os.environ.setdefault("LANGCHAIN_TRACING_V2", "true")
+    os.environ.setdefault("LANGCHAIN_API_KEY", settings.langchain_api_key)
+    os.environ.setdefault("LANGCHAIN_PROJECT", settings.langchain_project)
+    return True
+
+
+LANGSMITH_ENABLED: bool = _activate_langsmith()
 
 # ── Optional Langfuse import ──────────────────────────────────────────────────
 

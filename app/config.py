@@ -38,6 +38,12 @@ class Settings(BaseSettings):
     langfuse_secret_key: str = ""
     langfuse_host: str = "https://cloud.langfuse.com"
 
+    # LangSmith tracing (optional — leave blank to disable)
+    # Native LangGraph integration: no code changes needed, just set these vars.
+    langchain_tracing_v2: str = ""   # set to "true" to enable
+    langchain_api_key: str = ""      # ls__...
+    langchain_project: str = "production-rag-v3"
+
     # CI regression gate thresholds
     ci_max_p95_latency_ms: float = 8000.0   # p95 must be under 8s
     ci_min_avg_quality: float = 5.0          # avg quality must be ≥ 5/10
